@@ -15,7 +15,10 @@
  *   node tcp-client.js 127.0.0.1 9000 --url=http://localhost:3000 --reconnect
  *
  * Events emitted to your socket server:
- *   "tcp-data"       { source, data, bytes, timestamp }   (name changeable with --event)
+ *   "tcp-data"       { source, hex, bytes, values, timestamp }   (name changeable with --event)
+ *        hex    : raw data as a hex string, e.g. "aa550001012c"
+ *        bytes  : number of bytes in this chunk
+ *        values : { uint8[], uint16BE[], uint16LE[], uint32BE[], uint32LE[], text }
  *   "tcp-connected"  { source, timestamp }
  *   "tcp-closed"     { source, totalBytes, timestamp }
  *
@@ -63,6 +66,27 @@ function forward(event, payload) {
   out.emit(event, { source: SOURCE, ...payload, timestamp: Date.now() });
 }
 
+// ---------- hex + value conversion ----------
+function readAll(buf, size, method) {
+  const out = [];
+  for (let i = 0; i + size <= buf.length; i += size) out.push(buf[method](i));
+  return out;
+}
+
+// Convert a raw Buffer into a hex string and numeric values
+function decode(buf) {
+  const hex = buf.toString('hex');                       // "aa550001012c"
+  const values = {
+    uint8: [...buf],                                     // every byte as 0-255
+    uint16BE: readAll(buf, 2, 'readUInt16BE'),           // 2-byte numbers, big-endian
+    uint16LE: readAll(buf, 2, 'readUInt16LE'),           // 2-byte numbers, little-endian
+    uint32BE: readAll(buf, 4, 'readUInt32BE'),           // 4-byte numbers, big-endian
+    uint32LE: readAll(buf, 4, 'readUInt32LE'),           // 4-byte numbers, little-endian
+    text: buf.toString('utf8').replace(/[^\x20-\x7E]/g, '.'), // printable ASCII, "." for others
+  };
+  return { hex, values };
+}
+
 // ---------- TCP client ----------
 let tcp = null;
 let totalBytes = 0;
@@ -71,7 +95,6 @@ let quitting = false;
 function connectTcp() {
   console.log(`[tcp] Connecting to ${SOURCE} ...`);
   tcp = new net.Socket();
-  tcp.setEncoding('utf8');
   tcp.setKeepAlive(true, 10000);
 
   tcp.connect(TCP_PORT, TCP_HOST, () => {
@@ -80,11 +103,13 @@ function connectTcp() {
     forward('tcp-connected', {});
   });
 
-  tcp.on('data', (chunk) => {
-    const bytes = Buffer.byteLength(chunk);
+  tcp.on('data', (chunk) => {            // chunk is a raw Buffer
+    const bytes = chunk.length;
     totalBytes += bytes;
-    console.log(`[tcp -> socket] ${bytes} bytes: ${chunk.trimEnd()}`);
-    forward(DATA_EVENT, { data: chunk, bytes });
+    const { hex, values } = decode(chunk);
+    const spaced = hex.match(/../g).join(' ');
+    console.log(`[tcp -> socket] ${bytes} bytes | hex: ${spaced} | uint8: [${values.uint8.join(', ')}]`);
+    forward(DATA_EVENT, { hex, bytes, values });
   });
 
   tcp.on('end', () => console.log('[tcp] Server closed the connection.'));

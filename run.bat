@@ -26,7 +26,7 @@ if not exist "node_modules\socket.io-client" (
 )
 
 REM Run the client
-node tcp-client.js 192.168.0.190 20001 --url=http://localhost:3000 --reconnect
+node tcp-client.js 192.168.0.190 20001 --url=http://localhost:9000 --reconnect
 
 echo.
 echo Client stopped.
