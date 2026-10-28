@@ -28,6 +28,14 @@ io.on('connection', (client) => {
         console.log(`[${time(msg.timestamp)}] TCP connected to ${msg.source}`);
     });
 
+    client.on('modbus', (msg) => {
+        const v = msg.values || {};
+        console.log(v)
+
+        // Optional: relay to every other connected client (e.g. a web dashboard)
+        client.broadcast.emit('modbus', v);
+    });
+
     client.on('tcp-data', (msg) => {
         const v = msg.values || {};
         console.log(`[${time(msg.timestamp)}] DATA from ${msg.source} (${msg.bytes} bytes)`);
