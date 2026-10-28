@@ -30,7 +30,7 @@ io.on('connection', (client) => {
 
     client.on('modbus', (msg) => {
         const v = msg.values || {};
-        console.log(v)
+        console.log(msg)
 
         // Optional: relay to every other connected client (e.g. a web dashboard)
         client.broadcast.emit('modbus', v);
